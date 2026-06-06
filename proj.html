@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Controle de Materiais — Vários Itens</title>
+  <style>
+    body{font-family:Arial,Helvetica,sans-serif;background:#f5f7fb;margin:0;padding:20px}
+    .wrap{max-width:1000px;margin:auto;background:#fff;border-radius:10px;padding:20px;box-shadow:0 4px 12px rgba(0,0,0,.1)}
+    h1{margin:0 0 12px}
+    table{width:100%;border-collapse:collapse;margin-top:12px}
+    th,td{padding:8px;border:1px solid #ddd;text-align:left}
+    th{background:#fd950d;color:#fff}
+    input,select,button{padding:6px;border-radius:6px;border:1px solid #ccc}
+    button{cursor:pointer;background:#0d6efd;color:#fff;border:none}
+    button.danger{background:#0c0708}
+    button.secondary{background:#eceef0}
+    .row-group{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+    .row-group input, .row-group select{flex:1}
+    .stock-low{background:#e614a7;border-left:4px solid #87dac5}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Controle de Materiais — Vários Itens</h1>
+
+    <label>Responsável:</label>
+    <input id="responsavel" placeholder="Nome de quem pegou/entregou">
+
+    <label style="margin-top:10px">Movimento:</label>
+    <select id="movimento">
+      <option value="entrada">Entrada</option>
+      <option value="saida">Saída</option>
+    </select>
+
+    <h3 style="margin-top:15px">Materiais</h3>
+    <div id="materiaisContainer"></div>
+    <button onclick="adicionarLinha()">+ Adicionar Material</button>
+
+    <div style="margin-top:15px">
+      <button onclick="registrarTudo()">Registrar Tudo</button>
+      <button class="secondary" onclick="limparTudo()">Limpar</button>
+    </div>
+
+    <button onclick="toggleEstoque()" style="margin-top:25px">📦 Estoque</button>
+
+    <div id="estoqueSection" style="display:none; margin-top:10px">
+      <h2>Estoque Atual</h2>
+      <table id="estoqueTabela">
+        <thead><tr><th>Material</th><th>Quantidade</th><th>Unidade</th><th>Ações</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <h2 style="margin-top:25px">Histórico</h2>
+    <table id="histTabela">
+      <thead><tr><th>Data</th><th>Material</th><th>Qtd</th><th>Unidade</th><th>Responsável</th><th>Movimento</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+<script>
+let estoque = {}; // exemplo: { "Fio 2.5": { qtd: 30, unidade: "metros" } }
+let historico = [];
+
+function adicionarLinha(){
+  const container = document.getElementById("materiaisContainer");
+  const div = document.createElement("div");
+  div.className = "row-group";
+  div.innerHTML = `
+    <input placeholder="Material" class="mat">
+    <input type="number" placeholder="Qtd" class="qtd" min="0.1" step="0.1">
+    <select class="unidade">
+      <option value="metros">metros</option>
+      <option value="unidades">unidades</option>
+    </select>
+    <button class="danger" onclick="this.parentNode.remove()">Remover</button>
+  `;
+  container.appendChild(div);
+}
+
+function registrarTudo(){
+  const responsavel = document.getElementById("responsavel").value.trim();
+  const movimento = document.getElementById("movimento").value;
+  const linhas = document.querySelectorAll("#materiaisContainer .row-group");
+
+  if (!responsavel || linhas.length === 0) {
+    alert("Preencha o responsável e adicione pelo menos um material.");
+    return;
+  }
+
+  let houveErro = false;
+
+  linhas.forEach(linha => {
+    const material = linha.querySelector(".mat").value.trim();
+    const qtd = parseFloat(linha.querySelector(".qtd").value);
+    const unidade = linha.querySelector(".unidade").value;
+
+    if (material && qtd > 0) {
+      if (!estoque[material]) {
+        estoque[material] = { qtd: 0, unidade };
+      }
+
+      if (estoque[material].unidade !== unidade) {
+        alert(`O material "${material}" já foi registrado com a unidade "${estoque[material].unidade}".`);
+        houveErro = true;
+        return;
+      }
+
+      if (movimento === "entrada") {
+        estoque[material].qtd += qtd;
+      } else {
+        if (estoque[material].qtd < qtd) {
+          alert("Estoque insuficiente para " + material);
+          houveErro = true;
+          return;
+        }
+        estoque[material].qtd -= qtd;
+      }
+
+      historico.push({
+        material,
+        qtd,
+        unidade,
+        responsavel,
+        movimento,
+        data: new Date().toLocaleString()
+      });
+    }
+  });
+
+  if (!houveErro) {
+    atualizarTabelas();
+    salvar();
+    limparTudo();
+  }
+}
+
+function atualizarTabelas(){
+  const tbodyEstoque = document.querySelector("#estoqueTabela tbody");
+  tbodyEstoque.innerHTML = "";
+  Object.keys(estoque).forEach(mat => {
+    const item = estoque[mat];
+    const tr = document.createElement("tr");
+    if (item.qtd <= 5) tr.classList.add("stock-low");
+    tr.innerHTML = `
+      <td>${mat}</td>
+      <td>${item.qtd}</td>
+      <td>${item.unidade}</td>
+      <td><button onclick="verEstoque('${mat}')">Ver</button></td>
+    `;
+    tbodyEstoque.appendChild(tr);
+  });
+
+  const tbodyHist = document.querySelector("#histTabela tbody");
+  tbodyHist.innerHTML = "";
+  historico.slice().reverse().forEach(r => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${r.data}</td><td>${r.material}</td><td>${r.qtd}</td><td>${r.unidade}</td><td>${r.responsavel}</td><td>${r.movimento}</td>`;
+    tbodyHist.appendChild(tr);
+  });
+}
+
+function verEstoque(material){
+  const item = estoque[material];
+  alert(`Material: ${material}\nQuantidade: ${item.qtd} ${item.unidade}`);
+}
+
+function toggleEstoque() {
+  const div = document.getElementById("estoqueSection");
+  div.style.display = div.style.display === "none" ? "block" : "none";
+}
+
+function limparTudo(){
+  document.getElementById("materiaisContainer").innerHTML = "";
+  adicionarLinha();
+}
+
+function salvar(){
+  localStorage.setItem("estoque", JSON.stringify(estoque));
+  localStorage.setItem("historico", JSON.stringify(historico));
+}
+
+function carregar(){
+  estoque = JSON.parse(localStorage.getItem("estoque") || "{}");
+  historico = JSON.parse(localStorage.getItem("historico") || "[]");
+  atualizarTabelas();
+}
+
+carregar();
+adicionarLinha();
+</script>
+</body>
+</html>
